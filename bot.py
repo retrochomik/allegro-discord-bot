@@ -26,36 +26,39 @@ def save_state(data):
 
 
 def get_offer_data(url):
-    response = requests.get(url, headers=HEADERS, timeout=20)
-    response.raise_for_status()
-
-    soup = BeautifulSoup(response.text, "html.parser")
+    html = requests.get(url, headers=HEADERS).text
+    soup = BeautifulSoup(html, "html.parser")
 
     title = ""
     price = ""
     location = ""
     image = ""
 
+    # Tytuł
     og = soup.find("meta", property="og:title")
     if og:
         title = og.get("content", "")
 
+    # Zdjęcie
     ogimg = soup.find("meta", property="og:image")
     if ogimg:
         image = ogimg.get("content", "")
 
-    text = soup.get_text(" ", strip=True)
+    # Opis (zawiera cenę i lokalizację)
+    description = ""
+    meta = soup.find("meta", attrs={"name": "description"})
+    if meta:
+        description = meta.get("content", "")
 
-    p = re.search(r'(\d[\d ]*)\s*zł', text)
-    if p:
-        price = p.group(0)
+    # Cena
+    m = re.search(r'za\s+([\d\s,.]+)\s*zł', description)
+    if m:
+        price = m.group(1).strip() + " zł"
 
-    loc = re.search(
-        r'Miejscowość\s*([A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż \-]+)',
-        text
-    )
-    if loc:
-        location = loc.group(1)
+    # Lokalizacja
+    l = re.search(r'w mieście\s+([^.,]+)', description)
+    if l:
+        location = l.group(1).strip()
 
     return {
         "title": title,
@@ -65,10 +68,9 @@ def get_offer_data(url):
     }
 
 
-response = requests.get(PROFILE, headers=HEADERS, timeout=20)
-response.raise_for_status()
-
-soup = BeautifulSoup(response.text, "html.parser")
+# Pobranie listy ofert
+html = requests.get(PROFILE, headers=HEADERS).text
+soup = BeautifulSoup(html, "html.parser")
 
 links = []
 
@@ -81,18 +83,18 @@ for a in soup.find_all("a", href=True):
 
         links.append(href)
 
+# Usunięcie duplikatów
 links = list(dict.fromkeys(links))
 
 old = load_state()
 
+# Pierwsze uruchomienie - zapisuje stan i nic nie wysyła
 if not os.path.exists(STATE_FILE):
     save_state(links)
     print("Pierwsze uruchomienie")
     exit()
 
 new = [x for x in links if x not in old]
-
-print(f"Znaleziono {len(new)} nowych ofert.")
 
 for link in new:
 
@@ -121,20 +123,13 @@ for link in new:
             "url": offer["image"]
         }
 
-    r = requests.post(
+    requests.post(
         WEBHOOK,
         json={
             "username": "🎮 Retro Chomik",
+            "content": "**🆕 Nowa oferta na Allegro Lokalnie!**",
             "embeds": [embed]
-        },
-        timeout=20
+        }
     )
 
-    print(f"Discord HTTP: {r.status_code}")
-
-    if r.status_code != 204:
-        print(r.text)
-
 save_state(links)
-
-print("Gotowe.")
