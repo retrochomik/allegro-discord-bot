@@ -36,6 +36,9 @@ jobs:
 
           git add state.json
 
-          git diff --cached --quiet || git commit -m "Update state.json"
-
-          git push
+          if git diff --cached --quiet; then
+            echo "Brak zmian."
+          else
+            git commit -m "Update state.json"
+            git push
+          fi
