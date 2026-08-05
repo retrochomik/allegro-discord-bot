@@ -34,28 +34,33 @@ def get_offer_data(url):
     location = ""
     image = ""
 
+    # ==========================
     # Tytuł
-    og = soup.find("meta", property="og:title")
-    if og:
-        title = og.get("content", "")
+    # ==========================
+    page_title = soup.find("title")
+    if page_title:
+        title = page_title.get_text(strip=True)
+        title = title.split("|")[0].strip()
 
+    # ==========================
     # Zdjęcie
+    # ==========================
     ogimg = soup.find("meta", property="og:image")
     if ogimg:
         image = ogimg.get("content", "")
 
-    # Opis (zawiera cenę i lokalizację)
+    # ==========================
+    # Cena + lokalizacja
+    # ==========================
     description = ""
     meta = soup.find("meta", attrs={"name": "description"})
     if meta:
         description = meta.get("content", "")
 
-    # Cena
     m = re.search(r'za\s+([\d\s,.]+)\s*zł', description)
     if m:
         price = m.group(1).strip() + " zł"
 
-    # Lokalizacja
     l = re.search(r'w mieście\s+([^.,]+)', description)
     if l:
         location = l.group(1).strip()
@@ -68,7 +73,10 @@ def get_offer_data(url):
     }
 
 
+# ===================================
 # Pobranie listy ofert
+# ===================================
+
 html = requests.get(PROFILE, headers=HEADERS).text
 soup = BeautifulSoup(html, "html.parser")
 
@@ -78,22 +86,24 @@ for a in soup.find_all("a", href=True):
     href = a["href"]
 
     if "/oferta/" in href:
+
         if href.startswith("/"):
             href = "https://allegrolokalnie.pl" + href
 
         links.append(href)
 
-# Usunięcie duplikatów
+# usuń duplikaty
 links = list(dict.fromkeys(links))
 
 old = load_state()
 
-# Pierwsze uruchomienie - zapisuje stan i nic nie wysyła
+# pierwsze uruchomienie
 if not os.path.exists(STATE_FILE):
     save_state(links)
-    print("Pierwsze uruchomienie")
+    print("Pierwsze uruchomienie.")
     exit()
 
+# nowe oferty
 new = [x for x in links if x not in old]
 
 for link in new:
@@ -103,7 +113,7 @@ for link in new:
     embed = {
         "title": offer["title"] or "Nowa oferta",
         "url": link,
-        "color": 3066993,
+        "color": 0x2ECC71,
         "fields": [
             {
                 "name": "💰 Cena",
@@ -127,7 +137,7 @@ for link in new:
         WEBHOOK,
         json={
             "username": "🎮 Retro Chomik",
-            "content": "**🆕 Nowa oferta na Allegro Lokalnie!**",
+            "content": "## 🆕 Nowa oferta na Allegro Lokalnie!",
             "embeds": [embed]
         }
     )
