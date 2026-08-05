@@ -36,6 +36,13 @@ for a in soup.find_all("a", href=True):
 links = list(dict.fromkeys(links))
 
 old = load_state()
+
+# Pierwsze uruchomienie - zapisz aktualne oferty i nic nie wysyłaj
+if not old:
+    save_state(links)
+    print("Pierwsze uruchomienie - zapisano aktualne oferty.")
+    exit()
+
 new = [x for x in links if x not in old]
 
 for link in new:
