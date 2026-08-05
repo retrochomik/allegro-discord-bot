@@ -26,8 +26,8 @@ def save_state(data):
 
 def get_offer_data(url):
     html = requests.get(url, headers=HEADERS).text
-    soup = BeautifulSoup(html, "lxml")
-
+    soup = BeautifulSoup(html, "html.parser")
+    
     title = ""
 
     og = soup.find("meta", property="og:title")
