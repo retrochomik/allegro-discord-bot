@@ -9,18 +9,17 @@ jobs:
   monitor:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Restore state
-        uses: actions/cache/restore@v4
-        with:
-          path: state.json
-          key: allegro-state
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -30,9 +29,13 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: python bot.py
 
-      - name: Save state
-        uses: actions/cache/save@v4
-        if: always()
-        with:
-          path: state.json
-          key: allegro-state
+      - name: Commit updated state
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add state.json
+
+          git diff --cached --quiet || git commit -m "Update state.json"
+
+          git push
