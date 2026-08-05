@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import requests
 from bs4 import BeautifulSoup
 
@@ -25,18 +26,19 @@ def save_state(data):
 
 
 def get_offer_data(url):
-    html = requests.get(url, headers=HEADERS).text
-    soup = BeautifulSoup(html, "html.parser")
-    
+    response = requests.get(url, headers=HEADERS, timeout=20)
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
     title = ""
+    price = ""
+    location = ""
+    image = ""
 
     og = soup.find("meta", property="og:title")
     if og:
         title = og.get("content", "")
-
-    price = ""
-    location = ""
-    image = ""
 
     ogimg = soup.find("meta", property="og:image")
     if ogimg:
@@ -44,13 +46,14 @@ def get_offer_data(url):
 
     text = soup.get_text(" ", strip=True)
 
-    import re
-
     p = re.search(r'(\d[\d ]*)\s*zł', text)
     if p:
         price = p.group(0)
 
-    loc = re.search(r'Miejscowość\s*([A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż \-]+)', text)
+    loc = re.search(
+        r'Miejscowość\s*([A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż \-]+)',
+        text
+    )
     if loc:
         location = loc.group(1)
 
@@ -62,8 +65,10 @@ def get_offer_data(url):
     }
 
 
-html = requests.get(PROFILE, headers=HEADERS).text
-soup = BeautifulSoup(html, "lxml")
+response = requests.get(PROFILE, headers=HEADERS, timeout=20)
+response.raise_for_status()
+
+soup = BeautifulSoup(response.text, "html.parser")
 
 links = []
 
@@ -87,12 +92,14 @@ if not os.path.exists(STATE_FILE):
 
 new = [x for x in links if x not in old]
 
+print(f"Znaleziono {len(new)} nowych ofert.")
+
 for link in new:
 
     offer = get_offer_data(link)
 
     embed = {
-        "title": offer["title"],
+        "title": offer["title"] or "Nowa oferta",
         "url": link,
         "color": 3066993,
         "fields": [
@@ -114,12 +121,20 @@ for link in new:
             "url": offer["image"]
         }
 
-    requests.post(
+    r = requests.post(
         WEBHOOK,
         json={
             "username": "🎮 Retro Chomik",
             "embeds": [embed]
-        }
+        },
+        timeout=20
     )
 
+    print(f"Discord HTTP: {r.status_code}")
+
+    if r.status_code != 204:
+        print(r.text)
+
 save_state(links)
+
+print("Gotowe.")
