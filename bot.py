@@ -14,10 +14,28 @@ HEADERS = {
 
 
 def load_state():
-    if os.path.exists(STATE_FILE):
+    print("\n=== WCZYTUJĘ STATE.JSON ===")
+    print("Plik istnieje:", os.path.exists(STATE_FILE))
+    print("Ścieżka:", os.path.abspath(STATE_FILE))
+
+    if not os.path.exists(STATE_FILE):
+        print("BRAK PLIKU STATE.JSON")
+        return []
+
+    try:
         with open(STATE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+            data = json.load(f)
+
+        print(f"Wczytano {len(data)} ofert:")
+
+        for item in data:
+            print(item)
+
+        return data
+
+    except Exception as e:
+        print("BŁĄD ODCZYTU STATE.JSON:", e)
+        return []
 
 
 def save_state(data):
