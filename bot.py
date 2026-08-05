@@ -38,9 +38,9 @@ links = list(dict.fromkeys(links))
 old = load_state()
 
 # Pierwsze uruchomienie - zapisz aktualne oferty i nic nie wysyłaj
-if not old:
+if not os.path.exists(STATE_FILE):
     save_state(links)
-    print("Pierwsze uruchomienie - zapisano aktualne oferty.")
+    print("Pierwsze uruchomienie")
     exit()
 
 new = [x for x in links if x not in old]
