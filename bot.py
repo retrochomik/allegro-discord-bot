@@ -22,11 +22,11 @@ def load_state():
 
 def save_state(data):
     with open(STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f)
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 def get_offer_data(url):
-    html = requests.get(url, headers=HEADERS).text
+    html = requests.get(url, headers=HEADERS, timeout=20).text
     soup = BeautifulSoup(html, "html.parser")
 
     title = ""
@@ -34,24 +34,15 @@ def get_offer_data(url):
     location = ""
     image = ""
 
-    # ==========================
-    # Tytuł
-    # ==========================
     page_title = soup.find("title")
     if page_title:
         title = page_title.get_text(strip=True)
         title = title.split("|")[0].strip()
 
-    # ==========================
-    # Zdjęcie
-    # ==========================
     ogimg = soup.find("meta", property="og:image")
     if ogimg:
         image = ogimg.get("content", "")
 
-    # ==========================
-    # Cena + lokalizacja
-    # ==========================
     description = ""
     meta = soup.find("meta", attrs={"name": "description"})
     if meta:
@@ -73,11 +64,9 @@ def get_offer_data(url):
     }
 
 
-# ===================================
-# Pobranie listy ofert
-# ===================================
+print("=== POBIERAM PROFIL ===")
 
-html = requests.get(PROFILE, headers=HEADERS).text
+html = requests.get(PROFILE, headers=HEADERS, timeout=20).text
 soup = BeautifulSoup(html, "html.parser")
 
 links = []
@@ -86,25 +75,36 @@ for a in soup.find_all("a", href=True):
     href = a["href"]
 
     if "/oferta/" in href:
-
         if href.startswith("/"):
             href = "https://allegrolokalnie.pl" + href
 
         links.append(href)
 
-# usuń duplikaty
 links = list(dict.fromkeys(links))
+
+print("\n=== OFERTY Z PROFILU ===")
+for l in links:
+    print(l)
+print("========================")
 
 old = load_state()
 
-# pierwsze uruchomienie
+print("\n=== STATE.JSON ===")
+for l in old:
+    print(l)
+print("==================")
+
 if not os.path.exists(STATE_FILE):
+    print("Pierwsze uruchomienie")
     save_state(links)
-    print("Pierwsze uruchomienie.")
     exit()
 
-# nowe oferty
 new = [x for x in links if x not in old]
+
+print("\n=== NOWE OFERTY ===")
+for l in new:
+    print(l)
+print("===================")
 
 for link in new:
 
@@ -133,13 +133,22 @@ for link in new:
             "url": offer["image"]
         }
 
-    requests.post(
+    r = requests.post(
         WEBHOOK,
         json={
             "username": "🎮 Retro Chomik",
             "content": "## 🆕 Nowa oferta na Allegro Lokalnie!",
             "embeds": [embed]
-        }
+        },
+        timeout=20
     )
 
+    print(f"Wysłano {link} -> HTTP {r.status_code}")
+
+print("\n=== ZAPISUJĘ DO STATE.JSON ===")
+for l in links:
+    print(l)
+
 save_state(links)
+
+print("\nKoniec.")
