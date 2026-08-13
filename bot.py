@@ -14,28 +14,10 @@ HEADERS = {
 
 
 def load_state():
-    print("\n=== WCZYTUJĘ STATE.JSON ===")
-    print("Plik istnieje:", os.path.exists(STATE_FILE))
-    print("Ścieżka:", os.path.abspath(STATE_FILE))
-
-    if not os.path.exists(STATE_FILE):
-        print("BRAK PLIKU STATE.JSON")
-        return []
-
-    try:
+    if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        print(f"Wczytano {len(data)} ofert:")
-
-        for item in data:
-            print(item)
-
-        return data
-
-    except Exception as e:
-        print("BŁĄD ODCZYTU STATE.JSON:", e)
-        return []
+            return json.load(f)
+    return []
 
 
 def save_state(data):
@@ -44,129 +26,377 @@ def save_state(data):
 
 
 def get_offer_data(url):
-    html = requests.get(url, headers=HEADERS, timeout=20).text
-    soup = BeautifulSoup(html, "html.parser")
+    try:
+        r = requests.get(
+            url,
+            headers=HEADERS,
+            timeout=20
+        )
 
-    title = ""
-    price = ""
-    location = ""
-    image = ""
+        if r.status_code != 200:
+            print(f"Nie udało się pobrać oferty: {url} -> HTTP {r.status_code}")
+            return {
+                "title": "",
+                "price": "",
+                "location": "",
+                "image": ""
+            }
 
-    page_title = soup.find("title")
-    if page_title:
-        title = page_title.get_text(strip=True)
-        title = title.split("|")[0].strip()
+        html = r.text
+        soup = BeautifulSoup(html, "html.parser")
 
-    ogimg = soup.find("meta", property="og:image")
-    if ogimg:
-        image = ogimg.get("content", "")
+        title = ""
+        price = ""
+        location = ""
+        image = ""
 
-    description = ""
-    meta = soup.find("meta", attrs={"name": "description"})
-    if meta:
-        description = meta.get("content", "")
+        # ==========================
+        # TYTUŁ
+        # ==========================
 
-    m = re.search(r'za\s+([\d\s,.]+)\s*zł', description)
-    if m:
-        price = m.group(1).strip() + " zł"
+        page_title = soup.find("title")
 
-    l = re.search(r'w mieście\s+([^.,]+)', description)
-    if l:
-        location = l.group(1).strip()
+        if page_title:
+            title = page_title.get_text(strip=True)
+            title = title.split("|")[0].strip()
 
-    return {
-        "title": title,
-        "price": price,
-        "location": location,
-        "image": image
-    }
+        # ==========================
+        # ZDJĘCIE
+        # ==========================
 
+        ogimg = soup.find("meta", property="og:image")
+
+        if ogimg:
+            image = ogimg.get("content", "")
+
+        # ==========================
+        # DESCRIPTION
+        # ==========================
+
+        description = ""
+
+        meta = soup.find(
+            "meta",
+            attrs={"name": "description"}
+        )
+
+        if meta:
+            description = meta.get("content", "")
+
+        # ==========================
+        # CENA
+        # ==========================
+
+        m = re.search(
+            r'za\s+([\d\s,.]+)\s*zł',
+            description
+        )
+
+        if m:
+            price = m.group(1).strip() + " zł"
+
+        # ==========================
+        # LOKALIZACJA
+        # ==========================
+
+        l = re.search(
+            r'w mieście\s+([^.,]+)',
+            description
+        )
+
+        if l:
+            location = l.group(1).strip()
+
+        return {
+            "title": title,
+            "price": price,
+            "location": location,
+            "image": image
+        }
+
+    except Exception as e:
+
+        print(f"Błąd pobierania oferty {url}: {e}")
+
+        return {
+            "title": "",
+            "price": "",
+            "location": "",
+            "image": ""
+        }
+
+
+def send_discord(embed, content):
+
+    try:
+
+        r = requests.post(
+            WEBHOOK,
+            json={
+                "username": "🎮 Retro Chomik",
+                "content": content,
+                "embeds": [embed]
+            },
+            timeout=20
+        )
+
+        print(
+            f"Discord -> HTTP {r.status_code}"
+        )
+
+        return r.status_code == 204
+
+    except Exception as e:
+
+        print(
+            f"Błąd wysyłania Discord: {e}"
+        )
+
+        return False
+
+
+# ===================================
+# POBIERANIE PROFILU
+# ===================================
 
 print("=== POBIERAM PROFIL ===")
 
-html = requests.get(PROFILE, headers=HEADERS, timeout=20).text
-soup = BeautifulSoup(html, "html.parser")
+try:
+
+    r = requests.get(
+        PROFILE,
+        headers=HEADERS,
+        timeout=20
+    )
+
+    r.raise_for_status()
+
+except Exception as e:
+
+    print(f"Błąd pobierania profilu: {e}")
+    exit(1)
+
+
+soup = BeautifulSoup(
+    r.text,
+    "html.parser"
+)
 
 links = []
 
 for a in soup.find_all("a", href=True):
+
     href = a["href"]
 
     if "/oferta/" in href:
+
         if href.startswith("/"):
             href = "https://allegrolokalnie.pl" + href
 
         links.append(href)
 
-links = list(dict.fromkeys(links))
+
+# usuń duplikaty
+
+links = list(
+    dict.fromkeys(links)
+)
+
 
 print("\n=== OFERTY Z PROFILU ===")
-for l in links:
-    print(l)
+
+for link in links:
+    print(link)
+
 print("========================")
+
+
+# ===================================
+# WCZYTANIE STATE
+# ===================================
 
 old = load_state()
 
 print("\n=== STATE.JSON ===")
-for l in old:
-    print(l)
+
+for link in old:
+    print(link)
+
 print("==================")
 
+
+# ===================================
+# PIERWSZE URUCHOMIENIE
+# ===================================
+
 if not os.path.exists(STATE_FILE):
-    print("Pierwsze uruchomienie")
+
+    print(
+        "\nPierwsze uruchomienie - zapisuję aktualny stan."
+    )
+
     save_state(links)
+
     exit()
 
-new = [x for x in links if x not in old]
+
+# ===================================
+# NOWE OFERTY
+# ===================================
+
+new = [
+    link
+    for link in links
+    if link not in old
+]
+
 
 print("\n=== NOWE OFERTY ===")
-for l in new:
-    print(l)
+
+for link in new:
+    print(link)
+
 print("===================")
+
+
+# ===================================
+# USUNIĘTE / SPRZEDANE OFERTY
+# ===================================
+
+removed = [
+    link
+    for link in old
+    if link not in links
+]
+
+
+print("\n=== ZNIKNIĘTE OFERTY ===")
+
+for link in removed:
+    print(link)
+
+print("========================")
+
+
+# ===================================
+# WYSYŁANIE NOWYCH OFERT
+# ===================================
 
 for link in new:
 
     offer = get_offer_data(link)
 
     embed = {
+
         "title": offer["title"] or "Nowa oferta",
+
         "url": link,
+
         "color": 0x2ECC71,
+
         "fields": [
+
             {
                 "name": "💰 Cena",
                 "value": offer["price"] or "Brak danych",
                 "inline": True
             },
+
             {
                 "name": "📍 Lokalizacja",
                 "value": offer["location"] or "Brak danych",
                 "inline": True
             }
+
         ]
     }
 
     if offer["image"]:
+
         embed["image"] = {
             "url": offer["image"]
         }
 
-    r = requests.post(
-        WEBHOOK,
-        json={
-            "username": "🎮 Retro Chomik",
-            "content": "## 🆕 Nowa oferta na Allegro Lokalnie!",
-            "embeds": [embed]
-        },
-        timeout=20
+    send_discord(
+        embed,
+        "## 🆕 Nowa oferta na Allegro Lokalnie!"
     )
 
-    print(f"Wysłano {link} -> HTTP {r.status_code}")
 
-print("\n=== ZAPISUJĘ DO STATE.JSON ===")
-for l in links:
-    print(l)
+# ===================================
+# WYSYŁANIE SPRZEDANYCH / ZAKOŃCZONYCH
+# ===================================
+
+for link in removed:
+
+    offer = get_offer_data(link)
+
+    # jeżeli strona nie zwróciła danych,
+    # robimy nazwę z adresu
+
+    title = offer["title"]
+
+    if not title:
+
+        slug = link.rstrip("/").split("/")[-1]
+
+        title = slug.replace("-", " ")
+
+        title = title.capitalize()
+
+    embed = {
+
+        "title": title,
+
+        "url": link,
+
+        "color": 0xE74C3C,
+
+        "fields": [
+
+            {
+                "name": "📦 Status",
+                "value": "Oferta zniknęła z aktywnych",
+                "inline": False
+            },
+
+            {
+                "name": "💰 Cena",
+                "value": offer["price"] or "Brak danych",
+                "inline": True
+            },
+
+            {
+                "name": "📍 Lokalizacja",
+                "value": offer["location"] or "Brak danych",
+                "inline": True
+            }
+
+        ]
+    }
+
+    if offer["image"]:
+
+        embed["image"] = {
+            "url": offer["image"]
+        }
+
+    send_discord(
+        embed,
+        "## 🔴 Oferta sprzedana / zakończona!"
+    )
+
+
+# ===================================
+# AKTUALIZACJA STATE
+# ===================================
+
+print("\n=== AKTUALIZUJĘ STATE.JSON ===")
 
 save_state(links)
+
+print(
+    f"Zapisano {len(links)} aktywnych ofert."
+)
 
 print("\nKoniec.")
